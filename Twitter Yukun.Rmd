@@ -1,0 +1,336 @@
+---
+title: "Twitter Yukun"
+author: "Yukun He"
+date: "2017/12/12"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+###===Introduction===
+
+I was a player of both online games, League of Legends and Heroes of the Storm. I want to explore and compare online critics for these two games, since they are major competitors in the MOBA game category.
+Also I want to start my future career in the gaming industry, so that this project can prepare me for the future.
+
+```{r}
+
+library(devtools)
+library(twitteR)
+library(streamR)
+library(ROAuth)
+library(dplyr)
+library(ggplot2)
+library(splitstackshape)
+library(stringr)
+library(tm)
+library(wordcloud)
+library(plotly)
+library(grid) 
+library(tidytext)
+library(tidyverse)
+library(tidyr)
+library(reshape2)
+library(RColorBrewer)
+
+
+api_key <- 	"8jZnFpi5LCq9WiuGGNCRqePpI"
+api_secret <- "NZP0lq9lT5cl2lbhAdTWMzLPGrVJSmAAptKRyNrbzSxH0GyiIi"
+access_token <- "321852916-jhSeZgq948vcNUEWl90hHajh53La8cYhcn8yYqb3"
+access_token_secret <- "pYlobWYfFbDgNu2acYbVBsKvI5xVlcbqzgl3z7DunkI2n"
+  
+setup_twitter_oauth(api_key, api_secret, access_token, access_token_secret)
+
+```
+
+
+```{r}
+###Data for League of Legends
+league <- searchTwitter("'League of Legends' OR #leagueoflegends", n = 2000, lang="en", since="2016-12-01")
+
+league_df <- twListToDF(league)
+
+```
+
+```{r}
+###Data for Heroes of the Storm
+heroes <- searchTwitter("'Heroes of the Storm' OR #heroesofthestorm", n = 2000, lang="en", since="2016-12-01")
+
+heroes_df <- twListToDF(heroes)
+
+```
+
+```{r}
+league_df$text<-iconv(league_df$text, from = "latin1", to = "ASCII", sub="")
+league_df$text<-gsub('http\\S+\\s*', '', league_df$text)
+league_df$tweetid <- c(1:nrow(league_df))
+write.csv(league_df,"league_df.csv")
+
+heroes_df$text<-iconv(heroes_df$text, from = "latin1", to = "ASCII", sub="")
+heroes_df$text<-gsub('http\\S+\\s*', '', heroes_df$text)
+heroes_df$tweetid <- c(1:nrow(heroes_df))
+write.csv(heroes_df,"heroes_df.csv")
+```
+
+```{r}
+league_text <- read.csv("league_df.csv")
+league_text <- select(league_text, tweetid, text)
+league_text$text <- str_replace_all(league_text$text, "@", "")
+
+heroes_text <- read.csv("heroes_df.csv")
+heroes_text <- select(heroes_text, tweetid, text)
+heroes_text$text <- str_replace_all(heroes_text$text, "@", "")
+```
+
+###===Sentiment===
+
+From the sentiment analysis we can directly observe the most frequent words used in the Tweets we choose, and the positive and negative sentiments of those words.
+
+###Sentiment Analysis for League of Legends
+
+```{r}
+
+league_text <- data.frame(lapply(league_text, as.character), stringsAsFactors=FALSE)
+
+league_text <- data_frame(line = league_text$tweetid, text = league_text$text)
+league_text <- league_text %>%
+  unnest_tokens(word, text)
+
+data(stop_words)
+
+league_text <- league_text %>%
+  anti_join(stop_words) 
+
+league_text %>%
+  count(word, sort = TRUE) 
+
+nrcjoy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+league_text_sentiment_stat <- league_text %>%
+  inner_join(nrcjoy) %>%
+  count(word, sort = TRUE)
+
+league_text$line <- as.numeric(league_text$line)
+
+bing_word_counts_league <- league_text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts_league
+
+bing_word_counts_league %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+
+saveRDS(bing_word_counts_league,"bing_word_counts_league.rds")
+
+```
+
+###Sentiment Analysis for Heroes of the Storm
+
+```{r}
+
+heroes_text <- data.frame(lapply(heroes_text, as.character), stringsAsFactors=FALSE)
+
+heroes_text <- data_frame(line = heroes_text$tweetid, text = heroes_text$text)
+heroes_text <- heroes_text %>%
+  unnest_tokens(word, text)
+
+data(stop_words)
+
+heroes_text <- heroes_text %>%
+  anti_join(stop_words) 
+
+heroes_text %>%
+  count(word, sort = TRUE) 
+
+nrcjoy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+heroes_text_sentiment_stat <- heroes_text %>%
+  inner_join(nrcjoy) %>%
+  count(word, sort = TRUE)
+
+heroes_text$line <- as.numeric(heroes_text$line)
+
+bing_word_counts_heroes <- heroes_text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts_heroes
+
+bing_word_counts_heroes %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip()
+
+saveRDS(bing_word_counts_heroes,"bing_word_counts_heroes.rds")
+
+```
+
+###===Word Cloud===
+
+From the word cloud, we can divide words into positive (Blue) and negative (Red) categories. And the larger the size, the bolder the font, the more frequently that word is observed.
+                        
+###Word Cloud League
+
+```{r,fig.height=10, fig.width=8}
+
+league_text %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 60))
+
+league_text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("#F8766D", "#00BFC4"),
+                   max.words = 60,title.size=3)
+
+saveRDS(league_text,"league_text.rds")
+
+```
+
+###Word Cloud Heroes
+
+```{r,fig.height=10, fig.width=8}
+
+heroes_text %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 60))
+
+heroes_text %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("#F8766D", "#00BFC4"),
+                   max.words = 60,title.size=3)
+
+saveRDS(heroes_text,"heroes_text.rds")
+
+```
+
+
+###===MAP===
+
+```{r}
+##requestURL <- "https://api.twitter.com/oauth/request_token"
+##accessURL <- "https://api.twitter.com/oauth/access_token"
+##authURL <- "https://api.twitter.com/oauth/authorize"
+##consumerKey <-  "LFNRqX5i1PkB69SjEEncXWloq"
+##consumerSecret <- "4sDHqY6aLm7PRfJLxpq6GsWqphZxzX3dXLjssSLXYhO8wPwL3F"
+##my_oauth <- OAuthFactory$new(consumerKey = consumerKey, consumerSecret = consumerSecret, 
+##                             requestURL = requestURL, accessURL = accessURL, authURL = authURL)
+##my_oauth$handshake(cainfo = system.file("CurlSSL", "cacert.pem", package = "RCurl"))
+
+##save(my_oauth, file = "my_oauth.Rdata")
+```
+
+Google allows only 2500 requests per day for geocode, these two maps are not comprehensive. However, these maps provide a general overview of the locations Leagues of Legends & Heroes of the Storm. From the map, we observe that Tweets are mainly located at West Coast, Great Boston and New York Area, Chicago, and Texas. These regions have a lot of colleges, which represents the fact that the players are mainly college students. Other than these regions, Tweets are observed all over the USA, which means that the two games are both popular over the country.
+
+###Map for League
+
+```{r}
+load("my_oauth.Rdata")
+
+##map
+
+filterStream("league_map_setup.json", 
+             track=c("'League of Legends' OR #leagueoflegends"), 
+             locations = c(-125, 25, -66,50), 
+             timeout=200, oauth=my_oauth)
+league_map_setup<-parseTweets("league_map_setup.json", verbose = TRUE)
+ck1 <- sum(league_map_setup$lat>0, na.rm = TRUE)
+ck2 <- sum(league_map_setup$place_lat>0, na.rm = TRUE)
+ck3 <- sum(!is.na(league_map_setup$location))
+map.data <- map_data("state")   
+league_map <- data.frame(x = as.numeric(league_map_setup$lon),  
+                       y = as.numeric(league_map_setup$lat))
+league_map <- league_map[league_map$y > 25, ]  
+league_map<-filter(league_map,y>19&y<65,x>(-161.7)&x<(-68.01))
+ggplot(map.data) + 
+  geom_map(aes(map_id = region),  
+           map = map.data,  
+           fill = "white",             
+           color = "grey20", size = 0.25) + 
+  expand_limits(x = map.data$long, y = map.data$lat) +            
+  theme(axis.line = element_blank(),  
+        axis.text = element_blank(),  
+        axis.ticks = element_blank(),                     
+        axis.title = element_blank(),  
+        panel.background = element_blank(),  
+        panel.border = element_blank(),                     
+        panel.grid.major = element_blank(), 
+        plot.background = element_blank(),                     
+        plot.margin = unit(0 * c( -1.5, -1.5, -1.5, -1.5), "lines")) +  
+        geom_point(data = league_map,             
+        aes(x = x, y = y), size = 1,  
+        alpha = 1/5, color = "blue")  
+
+saveRDS(league_map, file="league_map.rds")
+
+```
+
+###Map of Heroes
+
+```{r}
+load("my_oauth.Rdata")
+
+##map
+
+filterStream("heroes_map_setup.json", 
+             track=c("'Heroes of the Storm' OR #heroesofthestorm"), 
+             locations = c(-125, 25, -66,50), 
+             timeout=200, oauth=my_oauth)
+heroes_map_setup<-parseTweets("heroes_map_setup.json", verbose = TRUE)
+ck1 <- sum(heroes_map_setup$lat>0, na.rm = TRUE)
+ck2 <- sum(heroes_map_setup$place_lat>0, na.rm = TRUE)
+ck3 <- sum(!is.na(heroes_map_setup$location))
+map.data <- map_data("state")   
+heroes_map <- data.frame(x = as.numeric(heroes_map_setup$lon),  
+                         y = as.numeric(heroes_map_setup$lat))
+heroes_map <- heroes_map[heroes_map$y > 25, ]  
+heroes_map<-filter(heroes_map,y>19&y<65,x>(-161.7)&x<(-68.01))
+ggplot(map.data) + 
+  geom_map(aes(map_id = region),  
+           map = map.data,  
+           fill = "white",             
+           color = "grey20", size = 0.25) + 
+  expand_limits(x = map.data$long, y = map.data$lat) +            
+  theme(axis.line = element_blank(),  
+        axis.text = element_blank(),  
+        axis.ticks = element_blank(),                     
+        axis.title = element_blank(),  
+        panel.background = element_blank(),  
+        panel.border = element_blank(),                     
+        panel.grid.major = element_blank(), 
+        plot.background = element_blank(),                     
+        plot.margin = unit(0 * c( -1.5, -1.5, -1.5, -1.5), "lines")) +  
+  geom_point(data = heroes_map,             
+             aes(x = x, y = y), size = 1,  
+             alpha = 1/5, color = "red")  
+
+saveRDS(heroes_map, file="heroes_map.rds")
+
+```
